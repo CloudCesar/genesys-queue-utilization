@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genesys Cloud Integration</title>
+    <script src="https://sdk-cdn.mypurecloud.com/javascript/151.0.0/purecloud-platform-client-v2.min.js"></script>
+    <script src="https://sdk-cdn.mypurecloud.com/client-apps/2.5.0/purecloud-client-app-sdk.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+        select, input, button {
+            width: 100%;
+            margin-top: 5px;
+            padding: 10px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #0078d7;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #005a9e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Genesys Cloud Queue Management</h1>
+        
+        <label for="queueSelect">Select a Queue:</label>
+        <select id="queueSelect">
+            <option value="">-- Select a Queue --</option>
+        </select>
+
+        <label for="agentsList">Agents Assigned:</label>
+        <select id="agentsList" size="5">
+            <option value="">-- No agents found --</option>
+        </select>
+
+        <label for="utilizationInput">Set Message Utilization (Integer):</label>
+        <input type="number" id="utilizationInput" min="0" step="1" placeholder="Enter utilization value">
+
+        <button id="updateButton">Update Utilization</button>
+    </div>
+
+    <script>
+        const platformClient = window.purecloud.platformClient;
+        const client = platformClient.ApiClient.instance;
+        const routingApi = new platformClient.RoutingApi();
+
+        // Authenticate and set up client
+        client.loginImplicitGrant("YOUR_CLIENT_ID", window.location.href)
+            .then(() => {
+                console.log("Logged in");
+                loadQueues();
+            })
+            .catch(err => console.error("Login failed", err));
+
+        // Load queues into the dropdown
+        function loadQueues() {
+            routingApi.getRoutingQueues({ pageSize: 100 })
+                .then(data => {
+                    const queueSelect = document.getElementById("queueSelect");
+                    queueSelect.innerHTML = '<option value="">-- Select a Queue --</option>';
+                    data.entities.forEach(queue => {
+                        const option = document.createElement("option");
+                        option.value = queue.id;
+                        option.textContent = queue.name;
+                        queueSelect.appendChild(option);
+                    });
+                })
+                .catch(err => console.error("Failed to load queues", err));
+        }
+
+        // Load agents when a queue is selected
+        document.getElementById("queueSelect").addEventListener("change", function () {
+            const queueId = this.value;
+            const agentsList = document.getElementById("agentsList");
+            agentsList.innerHTML = '<option value="">-- Loading agents... --</option>';
+
+            if (queueId) {
+                routingApi.getRoutingQueueUsers(queueId)
+                    .then(data => {
+                        agentsList.innerHTML = '';
+                        data.entities.forEach(agent => {
+                            const option = document.createElement("option");
+                            option.value = agent.id;
+                            option.textContent = agent.name;
+                            agentsList.appendChild(option);
+                        });
+                    })
+                    .catch(err => {
+                        console.error("Failed to load agents", err);
+                        agentsList.innerHTML = '<option value="">-- Failed to load agents --</option>';
+                    });
+            } else {
+                agentsList.innerHTML = '<option value="">-- No agents found --</option>';
+            }
+        });
+
+        // Update utilization for the selected agent
+        document.getElementById("updateButton").addEventListener("click", function () {
+            const agentId = document.getElementById("agentsList").value;
+            const utilizationValue = document.getElementById("utilizationInput").value;
+
+            if (!agentId) {
+                alert("Please select an agent.");
+                return;
+            }
+
+            if (!utilizationValue || isNaN(utilizationValue) || utilizationValue < 0) {
+                alert("Please enter a valid utilization value (integer >= 0).");
+                return;
+            }
+
+            const body = {
+                message: parseInt(utilizationValue, 10),
+            };
+
+            routingApi.patchRoutingUserUtilization(agentId, body)
+                .then(() => {
+                    alert("Utilization for 'message' updated successfully!");
+                })
+                .catch(err => {
+                    console.error("Failed to update utilization", err);
+                    alert("Failed to update utilization. Please try again.");
+                });
+        });
+    </script>
+</body>
+</html>
